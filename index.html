@@ -1,0 +1,637 @@
+index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Player Quest Tracker</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #1e1e2f;
+        color: white;
+        margin: 0;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 1200px;
+        margin: auto;
+    }
+
+    h1 {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .selector {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    select {
+        padding: 10px;
+        font-size: 16px;
+        min-width: 250px;
+        border-radius: 8px;
+        border: none;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        margin-bottom: 40px;
+    }
+
+    .stat-card {
+        background: #442d2d;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .stat-title {
+        font-size: 14px;
+        opacity: 0.8;
+        margin-bottom: 8px;
+    }
+
+    .stat-value {
+        font-size: 28px;
+        font-weight: bold;
+    }
+
+    .quest-section {
+        background: #2d2d44;
+        border-radius: 12px;
+        padding: 20px;
+    }
+
+    .quest-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .quest-item {
+        padding: 10px;
+        border-radius: 8px;
+        background: #3c3c5c;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .quest-complete {
+        border-left: 5px solid #4caf50;
+    }
+
+    .quest-incomplete {
+        border-left: 5px solid #777;
+        opacity: 0.7;
+    }
+
+    .status-icon {
+        font-size: 18px;
+    }
+
+    .loading {
+        text-align: center;
+        opacity: 0.8;
+        margin-top: 40px;
+    }
+
+    .quest-category {
+    margin-bottom: 30px;
+    }
+
+    .quest-category h3 {
+        margin-bottom: 10px;
+        padding-left: 5px;
+        border-left: 4px solid #4caf50;
+        opacity: 0.9;
+    }
+
+    .quest-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 350px;
+    height: 100%;
+    background: #1f1f2f;
+    box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 1001;
+    }
+
+    .quest-panel.show {
+        transform: translateX(0);
+    }
+
+    .quest-panel-content {
+        padding: 20px;
+    }
+
+    .quest-panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .quest-panel-header button {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+    }
+
+    .quest-category-label {
+        margin: 10px 0;
+        opacity: 0.7;
+    }
+
+    .quest-description {
+        margin-top: 20px;
+        line-height: 1.5;
+        opacity: 0.9;
+    }
+
+    .copy-btn {
+        margin-top: 20px;
+        width: 100%;
+        padding: 10px;
+        background: #4caf50;
+        border: none;
+        color: white;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .panel-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.4);
+        z-index: 1000;
+    }
+
+    .hidden {
+        display: none;
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Player Quest Tracker</h1>
+
+    <div class="selector">
+        <select id="playerSelect">
+            <option value="">Loading players...</option>
+        </select>
+    </div>
+
+    <div id="content"></div>
+</div>
+
+<script>
+// ==========================================
+// PASTE YOUR PUBLISHED CSV URL HERE
+// ==========================================
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSliVDN5gSey0OC0EoJuxFVqA4lyFxwwt3gZHEoigN-7ZvfCwrgVo1ypsuE3bnVBCgvViZ5ijWVcEHE/pub?gid=1645289372&single=true&output=csv";
+
+const QUEST_INFO_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKF0b3pHt2lo1HGy-93ulZ7y_GbnUbFKNSNC6bzLsa6XO73vkqrjtNrjjA4S6UieODRu-h_ZUXDfS-/pub?gid=202732672&single=true&output=csv";
+
+// Column indexes:
+// B = 1
+// C-J = 2-9
+// K-DV = 10-125
+
+let allRows = [];
+let headers = [];
+
+let questInfo = {}; // key = quest name
+let questIndex = [];
+
+const grouped = {
+    General: [],
+    Berserker: [],
+    Brute: [],
+    Knight: [],
+    Rogue: [],
+    Unknown: []
+};
+
+async function loadAllData() {
+    await Promise.all([loadSheet(), loadQuestInfo()]);
+}
+
+async function loadSheet() {
+    const response = await fetch(SHEET_URL);
+    const csvText = await response.text();
+
+    const rows = parseCSV(csvText);
+
+    // Row 3 contains headers
+    headers = rows[2];
+
+    // Data starts at Row 4
+    allRows = rows.slice(3);
+
+    populatePlayerDropdown();
+}
+
+async function loadQuestInfo() {
+    const res = await fetch(QUEST_INFO_URL);
+    const text = await res.text();
+
+    const rows = parseCSV(text);
+
+    questIndex = [];
+
+    const startRow = 3; // row 4
+    const rowCount = rows.length;
+    const colCount = rows[0].length;
+
+    for (let col = 0; col < colCount; col++) {
+        const category = (rows[0][col] || "").trim() || "Unknown";
+
+        for (let row = startRow; row < rowCount; row++) {
+            const rawName = (rows[row][col] || "").trim();
+            if (!rawName) continue;
+
+            const desc = (rows[row + 1]?.[col] || "").trim() || "No description available";
+            const submitCode = (rows[row + 2]?.[col] || "").trim() || "";
+
+            questIndex.push({
+                rawName,
+                category,
+                desc,
+                submitCode
+            });
+
+            // skip ahead so we don't re-read same quest
+            row += 2;
+        }
+    }
+}
+
+function findQuestMeta(trackerName) {
+    const t = trackerName.toLowerCase();
+
+    let best = null;
+    let bestScore = 0;
+
+    for (const q of questIndex) {
+        const qn = q.rawName.toLowerCase();
+
+        let score = 0;
+
+        if (qn.includes(t)) score += 10;
+        if (t.includes(qn)) score += 5;
+
+        // partial word overlap bonus
+        const tWords = t.split(" ");
+        for (const w of tWords) {
+            if (qn.includes(w)) score += 1;
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            best = q;
+        }
+    }
+
+    return best || {
+        category: "Unknown",
+        desc: "No description available",
+        rawName: trackerName
+    };
+}
+
+function parseCSV(text) {
+    const rows = [];
+    let currentRow = [];
+    let currentCell = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (char === '"') {
+            if (insideQuotes && nextChar === '"') {
+                currentCell += '"';
+                i++;
+            } else {
+                insideQuotes = !insideQuotes;
+            }
+        } else if (char === ',' && !insideQuotes) {
+            currentRow.push(currentCell);
+            currentCell = '';
+        } else if ((char === '\n' || char === '\r') && !insideQuotes) {
+            if (currentCell !== '' || currentRow.length > 0) {
+                currentRow.push(currentCell);
+                rows.push(currentRow);
+                currentRow = [];
+                currentCell = '';
+            }
+        } else {
+            currentCell += char;
+        }
+    }
+
+    if (currentCell.length > 0 || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+    }
+
+    return rows;
+}
+
+function getPlayerFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('player');
+}
+
+function populatePlayerDropdown() {
+    const select = document.getElementById('playerSelect');
+
+    select.innerHTML = '<option value="">Select a player</option>';
+
+    const playerNames = allRows
+        .map(row => row[1])
+        .filter(name => name && name.trim() !== '');
+
+    playerNames.sort((a, b) => a.localeCompare(b));
+
+    playerNames.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+    });
+
+    const urlPlayer = getPlayerFromURL();
+    const savedPlayer = localStorage.getItem('selectedPlayer');
+
+    const initialPlayer =
+        urlPlayer && playerNames.includes(urlPlayer)
+            ? urlPlayer
+            : savedPlayer && playerNames.includes(savedPlayer)
+                ? savedPlayer
+                : null;
+
+    if (initialPlayer) {
+        select.value = initialPlayer;
+        displayPlayer(initialPlayer);
+    }
+
+    select.onchange = () => {
+        const name = select.value;
+
+        localStorage.setItem('selectedPlayer', name);
+
+        // update URL without reloading page
+        const newURL = new URL(window.location);
+        if (name) {
+            newURL.searchParams.set('player', name);
+        } else {
+            newURL.searchParams.delete('player');
+        }
+        window.history.replaceState({}, '', newURL);
+
+        displayPlayer(name);
+    };
+}
+
+let currentQuest = null;
+
+function openQuestPanel(encodedName) {
+    const name = decodeURIComponent(encodedName);
+    const meta = findQuestMeta(name);
+
+    currentQuest = meta;
+
+    document.getElementById("panelTitle").textContent = meta.rawName;
+    document.getElementById("panelCategory").textContent = meta.category;
+    document.getElementById("panelDesc").textContent = meta.desc;
+
+    const panel = document.getElementById("questPanel");
+    const backdrop = document.getElementById("panelBackdrop");
+
+    panel.classList.add("show");
+    panel.classList.remove("hidden");
+
+    backdrop.classList.remove("hidden");
+
+    document.getElementById("copyBtn").onclick = () => {
+        if (!meta.submitCode) return;
+
+        navigator.clipboard.writeText(meta.submitCode);
+        showToast("Quest code copied!");
+    };
+}
+
+function closeQuestPanel() {
+    document.getElementById("questPanel").classList.remove("show");
+
+    setTimeout(() => {
+        document.getElementById("questPanel").classList.add("hidden");
+        document.getElementById("panelBackdrop").classList.add("hidden");
+    }, 250);
+}
+
+function copyQuestCode(encodedName) {
+    const name = decodeURIComponent(encodedName);
+
+    const meta = findQuestMeta(name);
+
+    if (!meta.submitCode) {
+        alert("No submit code found for this quest.");
+        return;
+    }
+
+    navigator.clipboard.writeText(meta.submitCode)
+        .then(() => {
+            showToast("Quest code copied!");
+        })
+        .catch(err => {
+            console.error("Clipboard failed:", err);
+        });
+}
+
+function showToast(msg) {
+    const div = document.createElement("div");
+    div.textContent = msg;
+    div.style.position = "fixed";
+    div.style.bottom = "20px";
+    div.style.right = "20px";
+    div.style.background = "#333";
+    div.style.color = "white";
+    div.style.padding = "10px 15px";
+    div.style.borderRadius = "8px";
+    div.style.zIndex = 9999;
+
+    document.body.appendChild(div);
+
+    setTimeout(() => div.remove(), 1500);
+}
+
+function displayPlayer(playerName) {
+    const content = document.getElementById('content');
+
+    if (!playerName) {
+        content.innerHTML = '';
+        return;
+    }
+
+    const row = allRows.find(r => r[1] === playerName);
+
+    if (!row) {
+        content.innerHTML = '<p>Player not found.</p>';
+        return;
+    }
+
+    // Columns C-J (indexes 2-9)
+    const statHTML = [];
+
+    for (let col = 2; col <= 9; col++) {
+        const label = headers[col] || `Column ${col}`;
+        const value = row[col] || '0';
+
+        statHTML.push(`
+            <div class="stat-card">
+                <div class="stat-title">${escapeHTML(label)}</div>
+                <div class="stat-value">${escapeHTML(value)}</div>
+            </div>
+        `);
+    }
+
+    const grouped = {};
+
+    for (let col = 10; col <= 125; col++) {
+        const questName = headers[col];
+        if (!questName) continue;
+
+        const raw = (row[col] || '').toString().toLowerCase();
+
+        const completed =
+            raw === 'true' ||
+            raw === 'yes' ||
+            raw === '1';
+
+        const meta = findQuestMeta(questName)
+
+        const category = meta.category || "Unknown";
+
+        if (!grouped[category]) grouped[category] = [];
+
+        grouped[category].push({
+            name: questName,
+            completed,
+            desc: meta.desc
+        });
+    }
+
+    let questHTML = "";
+
+    for (const category of Object.keys(grouped)) {
+        const quests = grouped[category];
+
+        questHTML += `
+            <div class="quest-category">
+                <h3>${escapeHTML(category)}</h3>
+
+                <div class="quest-grid">
+                    ${quests.map(q => `
+                        <div class="quest-item ${q.completed ? 'quest-complete' : 'quest-incomplete'}"
+                             title="${escapeHTML(q.desc)}"
+                             onclick="openQuestPanel('${encodeURIComponent(q.name)}')">
+                            <div class="status-icon">
+                                ${q.completed ? "✅" : "⬜"}
+                            </div>
+                            <div>${escapeHTML(q.name)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    content.innerHTML = `
+        <h2>${escapeHTML(playerName)}</h2>
+
+        <div class="stats-grid">
+            ${statHTML.join('')}
+        </div>
+
+        <div class="quest-section">
+            <h2>Quest Progress</h2>
+            ${questHTML}
+        </div>
+    `;
+}
+
+function escapeHTML(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+setInterval(async () => {
+    try {
+        await loadAllData();
+
+        const currentPlayer =
+            document.getElementById('playerSelect').value;
+
+        if (currentPlayer) {
+            displayPlayer(currentPlayer);
+        }
+
+        console.log('Sheet refreshed');
+    } catch (err) {
+        console.error('Refresh failed', err);
+    }
+}, 10000);
+
+loadAllData().catch(err => {
+    console.error(err);
+
+    document.getElementById('content').innerHTML = `
+        <div class="loading">
+            Failed to load Google Sheet.<br><br>
+            Make sure the sheet is published to the web as CSV.
+        </div>
+    `;
+});
+</script>
+<div id="questPanel" class="quest-panel hidden">
+    <div class="quest-panel-content">
+        <div class="quest-panel-header">
+            <h2 id="panelTitle">Quest</h2>
+            <button onclick="closeQuestPanel()">✖</button>
+        </div>
+
+        <div id="panelCategory" class="quest-category-label"></div>
+
+        <p id="panelDesc" class="quest-description"></p>
+
+        <button id="copyBtn" class="copy-btn">Copy Submit Code</button>
+    </div>
+</div>
+
+<div id="panelBackdrop" class="panel-backdrop hidden" onclick="closeQuestPanel()"></div>
+</body>
+</html>
