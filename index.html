@@ -229,6 +229,8 @@ const grouped = {
     Unknown: []
 };
 
+let columnCategories = [];
+
 async function loadAllData() {
     await Promise.all([loadSheet(), loadQuestInfo()]);
 }
@@ -238,6 +240,8 @@ async function loadSheet() {
     const csvText = await response.text();
 
     const rows = parseCSV(csvText);
+
+    buildColumnCategories(rows);
 
     // Row 3 contains headers
     headers = rows[2];
@@ -354,6 +358,38 @@ function parseCSV(text) {
     }
 
     return rows;
+}
+
+function buildColumnCategories(rows) {
+    const row = rows[0]; // Row 1 = categories
+
+    let currentCategory = "Unknown";
+
+    columnCategories = [];
+
+    for (let col = 0; col < row.length; col++) {
+        const cell = (row[col] || "").trim();
+
+        if (cell) {
+            currentCategory = cell;
+        }
+
+        columnCategories[col] = currentCategory;
+    }
+
+    // Fix: anything after Rogue becomes Achievements
+    let seenRogue = false;
+
+    for (let col = 0; col < columnCategories.length; col++) {
+        if (columnCategories[col] === "Rogue") {
+            seenRogue = true;
+            continue;
+        }
+
+        if (seenRogue && col > columnCategories.indexOf("Rogue")) {
+            columnCategories[col] = "Achievements";
+        }
+    }
 }
 
 function getPlayerFromURL() {
@@ -517,22 +553,25 @@ function displayPlayer(playerName) {
 
     const grouped = {};
 
-    for (let col = 10; col <= 125; col++) {
-        const questName = headers[col];
-        if (!questName) continue;
+    for (let col = 0; col < headers.length; col++) {
 
-        const raw = (row[col] || '').toString().toLowerCase();
+        const category = columnCategories[col] || "Unknown";
+        const questName = headers[col];
+
+        if (!questName || category === "Unknown") continue;
+
+        const raw = (row[col] || "").toLowerCase();
 
         const completed =
-            raw === 'true' ||
-            raw === 'yes' ||
-            raw === '1';
+            raw === "true" ||
+            raw === "yes" ||
+            raw === "1";
 
-        const meta = findQuestMeta(questName)
+        if (!grouped[category]) {
+            grouped[category] = [];
+        }
 
-        const category = meta.category || "Unknown";
-
-        if (!grouped[category]) grouped[category] = [];
+        const meta = findQuestMeta(questName);
 
         grouped[category].push({
             name: questName,
@@ -543,8 +582,7 @@ function displayPlayer(playerName) {
 
     let questHTML = "";
 
-    for (const category of Object.keys(grouped)) {
-        const quests = grouped[category];
+    for (const [category, quests] of Object.entries(grouped)) {
 
         questHTML += `
             <div class="quest-category">
@@ -553,7 +591,6 @@ function displayPlayer(playerName) {
                 <div class="quest-grid">
                     ${quests.map(q => `
                         <div class="quest-item ${q.completed ? 'quest-complete' : 'quest-incomplete'}"
-                             title="${escapeHTML(q.desc)}"
                              onclick="openQuestPanel('${encodeURIComponent(q.name)}')">
                             <div class="status-icon">
                                 ${q.completed ? "✅" : "⬜"}
