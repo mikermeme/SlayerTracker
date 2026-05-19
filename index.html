@@ -377,19 +377,22 @@ function buildColumnCategories(rows) {
         columnCategories[col] = currentCategory;
     }
 
-    // Fix: anything after Rogue becomes Achievements
-    let seenRogue = false;
+    // console.log(columnCategories.indexOf("General"))
+    // console.log(columnCategories.indexOf("Champion Jarl"))
 
-    for (let col = 0; col < columnCategories.length; col++) {
-        if (columnCategories[col] === "Rogue") {
-            seenRogue = true;
-            continue;
-        }
+    // // Fix: anything after Rogue becomes Achievements
+    // let seenRogue = false;
 
-        if (seenRogue && col > columnCategories.indexOf("Rogue")) {
-            columnCategories[col] = "Achievements";
-        }
-    }
+    // for (let col = 0; col < columnCategories.length; col++) {
+    //     if (columnCategories[col] === "Rogue") {
+    //         seenRogue = true;
+    //         continue;
+    //     }
+
+    //     if (seenRogue && col > columnCategories.indexOf("Rogue")) {
+    //         columnCategories[col] = "Achievements";
+    //     }
+    // }
 }
 
 function getPlayerFromURL() {
@@ -553,7 +556,7 @@ function displayPlayer(playerName) {
 
     const grouped = {};
 
-    for (let col = 0; col < headers.length; col++) {
+    for (let col = 10; col < headers.length; col++) {
 
         const category = columnCategories[col] || "Unknown";
         const questName = headers[col];
