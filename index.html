@@ -1,677 +1,723 @@
-index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Player Quest Tracker</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slayer Summons Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --surface-color: #1a1a1a;
+            --surface-hover: #262626;
+            --accent-color: #e53935;
+            --accent-hover: #ef5350;
+            --text-main: #f5f5f5;
+            --text-muted: #aaaaaa;
+            --border-color: #333333;
+            --completed-color: #2e7d32;
+        }
 
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #1e1e2f;
-        color: white;
-        margin: 0;
-        padding: 20px;
-    }
+        * { box-sizing: border-box; }
 
-    .container {
-        max-width: 1200px;
-        margin: auto;
-    }
+        /* Full viewport height layout with hidden outer scroll */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; 
+            display: flex;
+            flex-direction: column;
+        }
 
-    h1 {
-        text-align: center;
-        margin-bottom: 30px;
-    }
+        /* Top Bar - Sticky & Unaffected by horizontal scroll */
+        .top-bar {
+            flex-shrink: 0;
+            background-color: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 2px solid var(--accent-color);
+            padding: 15px 25px;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
 
-    .selector {
-        text-align: center;
-        margin-bottom: 30px;
-    }
+        h1 { margin: 0; font-size: 1.5rem; color: var(--text-main); text-transform: uppercase; letter-spacing: 2px; }
+        h1 span { color: var(--accent-color); }
 
-    select {
-        padding: 10px;
-        font-size: 16px;
-        min-width: 250px;
-        border-radius: 8px;
-        border: none;
-    }
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            overflow: visible !important;
+        }
 
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 15px;
-        margin-bottom: 40px;
-    }
+        select, input[type="text"], button {
+            background-color: #000;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.95rem;
+        }
 
-    .stat-card {
-        background: #442d2d;
-        padding: 15px;
-        border-radius: 12px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-    }
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
 
-    .stat-title {
-        font-size: 14px;
-        opacity: 0.8;
-        margin-bottom: 8px;
-    }
+        button {
+            background-color: var(--surface-hover);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
 
-    .stat-value {
-        font-size: 28px;
-        font-weight: bold;
-    }
+        button:hover {
+            background-color: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
 
-    .quest-section {
-        background: #2d2d44;
-        border-radius: 12px;
-        padding: 20px;
-    }
+        /* Unified scroll container for vertical & horizontal scroll */
+        .scroll-container {
+            flex-grow: 1;
+            overflow: auto; /* Triggers always-visible scrollbars inside the viewport */
+            position: relative;
+        }
 
-    .quest-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 10px;
-        margin-top: 20px;
-    }
+        /* Summary Section - Scrolls vertically, but stays pinned horizontally */
+        .summary-container {
+            position: sticky;
+            left: 25px; 
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 20px 0 5px 0;
+            margin: 0 25px;
+            z-index: 10;
+            pointer-events: none; /* Prevents background block interaction */
 
-    .quest-item {
-        padding: 10px;
-        border-radius: 8px;
-        background: #3c3c5c;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+        }
 
-    .quest-complete {
-        border-left: 5px solid #4caf50;
-    }
+        .summary-pill {
+            background-color: #000;
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            pointer-events: auto; /* Keeps pills interactive if needed */
+        }
 
-    .quest-incomplete {
-        border-left: 5px solid #777;
-        opacity: 0.7;
-    }
+        .summary-pill strong { color: var(--accent-color); font-size: 1.5rem;}
 
-    .status-icon {
-        font-size: 18px;
-    }
+        /* Board & Columns */
+        .board-wrapper {
+            width: 100%;
+            padding: 15px 25px 25px 25px;
 
-    .loading {
-        text-align: center;
-        opacity: 0.8;
-        margin-top: 40px;
-    }
+        }
 
-    .quest-category {
-    margin-bottom: 30px;
-    }
+        .board {
+            display: flex;
+            gap: 20px;
+            width: max-content;
+        }
 
-    .quest-category h3 {
-        margin-bottom: 10px;
-        padding-left: 5px;
-        border-left: 4px solid #4caf50;
-        opacity: 0.9;
-    }
+        .category-column {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 480px; 
+            width: 480px;
+            background-color: #111;
+            padding: 0 8px 8px 8px; /* Top padding is 0 for sticky alignment */
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            position: relative;
 
-    .quest-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 350px;
-    height: 100%;
-    background: #1f1f2f;
-    box-shadow: -5px 0 20px rgba(0,0,0,0.5);
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
-    z-index: 1001;
-    }
+        }
 
-    .quest-panel.show {
-        transform: translateX(0);
-    }
+/*        .category-column h2 {
+            margin: 5px 0 10px 0;
+            font-size: 1.5rem;
+            color: var(--accent-color);
+            text-align: center;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }*/
 
-    .quest-panel-content {
-        padding: 20px;
-    }
+        /* Sticky category headers when scrolling down */
+        .category-column h2 {
+            position: sticky;
+            top: 0;
+            background-color: #111;
+            z-index: 5;
+            margin: 0;
+            padding: 12px 0 8px 0;
+            font-size: 1.5rem;
+            color: var(--accent-color);
+            text-align: center;
+            /*text-transform: uppercase;*/
+            border-bottom: 1px solid var(--border-color);
+        }
 
-    .quest-panel-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
+        /* Quest Cards */
+        .quest-card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+            width: 100%;
+        }
 
-    .quest-panel-header button {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 20px;
-        cursor: pointer;
-    }
+        .quest-card:hover { border-color: var(--accent-hover); }
 
-    .quest-category-label {
-        margin: 10px 0;
-        opacity: 0.7;
-    }
+        .quest-card.completed { border-left-color: var(--completed-color); }
+        .quest-card.replaced { opacity: 0.6; }
+        /*.quest-card.replaced .quest-title { text-decoration: line-through; color: var(--text-muted); }*/
+        .quest-card.replaced .quest-title {color: var(--text-muted); }
 
-    .quest-description {
-        margin-top: 20px;
-        line-height: 1.5;
-        opacity: 0.9;
-    }
+        /* Custom Green Checkbox */
+        .title-checkbox {
+            appearance: none;
+            width: 20px; height: 20px;
+            border: 2px solid var(--border-color);
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .title-checkbox:checked { background-color: var(--accent-color); border-color: var(--accent-color); }
+        .title-checkbox.is-completed { background-color: var(--completed-color); border-color: var(--completed-color); cursor: default; }
+        .title-checkbox.is-completed::after {
+            content: '✔';
+            position: absolute; color: white; font-size: 14px; left: 2px; top: -2px;
+        }
+        
+        /* Prevent accidental text highlighting when clicking */
+        .quest-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
 
-    .copy-btn {
-        margin-top: 20px;
-        width: 100%;
-        padding: 10px;
-        background: #4caf50;
-        border: none;
-        color: white;
-        border-radius: 8px;
-        cursor: pointer;
-    }
+        /* Checkbox Styling */
+        .title-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            margin: 0;
+            flex-shrink: 0;
+            accent-color: var(--accent-color); /* To-Do Red */
+        }
 
-    .panel-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.4);
-        z-index: 1000;
-    }
+        .title-checkbox.is-completed {
+            accent-color: var(--completed-color); /* Completed Green */
+            cursor: default;
+        }
 
-    .hidden {
-        display: none;
-    }
-</style>
+        .quest-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: bold;
+            color: var(--text-main);
+            flex-grow: 1;
+        }
+
+        .status-replaced { font-size: 0.75rem; text-transform: uppercase; font-weight: bold; color: var(--text-muted); }
+
+        /* Quest Details */
+        .quest-details {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--border-color);
+            cursor: default;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .quest-card.expanded .quest-details { display: block; }
+        .quest-desc { white-space: pre-wrap; font-size: 0.95rem; color: var(--text-muted); margin-bottom: 15px; line-height: 1.4; }
+
+        .code-embed {
+            background-color: #000;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .code-embed code { color: #e6e6e6; font-family: monospace; font-size: 0.9rem; word-break: break-all; }
+        .copy-btn { padding: 4px 10px; font-size: 0.8rem; }
+        
+        /* Inline Media Embeds */
+        .media-container {
+            margin-top: 15px;
+            width: 100%;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .media-container img, .media-container video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .media-container iframe {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border: none;
+            display: block;
+        }
+
+        .media-container a {
+            display: inline-block;
+            padding: 15px;
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: bold;
+            text-align: center;
+            width: 100%;
+        }
+        
+        .media-container a:hover { text-decoration: underline; background-color: var(--surface-hover); }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
+
+        .loading { text-align: center; padding: 50px; font-size: 1.2rem; color: var(--text-muted); width: 100%; }
+    </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Player Quest Tracker</h1>
-
-    <div class="selector">
-        <select id="playerSelect">
-            <option value="">Loading players...</option>
-        </select>
+    <!-- Sticky Header -->
+    <div class="top-bar">
+        <h1>Summons <span>//</span> Tracker</h1>
+        <div class="controls">
+            <select id="playerSelect">
+                <option value="">Select a Player...</option>
+            </select>
+            <select id="filterSelect">
+                <option value="all">All Quests</option>
+                <option value="completed">Completed</option>
+                <option value="incomplete">Incomplete</option>
+                <option value="todo">My To-Do List</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Search quests...">
+            <button id="expandBtn">Expand All</button>
+            <button id="collapseBtn">Collapse All</button>
+        </div>
     </div>
+    
+    <!-- Unified Scroll Container -->
+    <div class="scroll-container" id="scrollContainer">
+        
+        <!-- Summary counts (Scrolls away vertically, stays locked horizontally) -->
+        <div class="summary-container" id="summaryContainer">
+            <!-- Summary counts injected here -->
+        </div>
 
-    <div id="content"></div>
-</div>
 
-<script>
-// ==========================================
-// PASTE YOUR PUBLISHED CSV URL HERE
-// ==========================================
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSliVDN5gSey0OC0EoJuxFVqA4lyFxwwt3gZHEoigN-7ZvfCwrgVo1ypsuE3bnVBCgvViZ5ijWVcEHE/pub?gid=1645289372&single=true&output=csv";
+    <!-- Board Wrapper -->
+    <div class="board-wrapper" id="boardWrapper">
+        <div class="loading" id="loadingText">Fetching data from Google Sheets...</div>
+        <div class="board" id="board">
+            <!-- Columns injected here -->
+        </div>
 
-const QUEST_INFO_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKF0b3pHt2lo1HGy-93ulZ7y_GbnUbFKNSNC6bzLsa6XO73vkqrjtNrjjA4S6UieODRu-h_ZUXDfS-/pub?gid=202732672&single=true&output=csv";
 
-// Column indexes:
-// B = 1
-// C-J = 2-9
-// K-DV = 10-125
+    <script>
+        // ==========================================
+        // CONFIGURATION: REPLACE THIS URL WITH YOURS
+        // ==========================================
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKF0b3pHt2lo1HGy-93ulZ7y_GbnUbFKNSNC6bzLsa6XO73vkqrjtNrjjA4S6UieODRu-h_ZUXDfS-/pub?gid=1645289372&single=true&output=csv';
+        
+        // State
+        let parsedQuests = [];
+        let players = [];
+        let todoSet = new Set(JSON.parse(localStorage.getItem('trackerTodo') || '[]'));
+        let expandedSet = new Set();
+        let selectedPlayerName = '';
 
-let allRows = [];
-let headers = [];
+        // DOM Elements
+        const playerSelect = document.getElementById('playerSelect');
+        const filterSelect = document.getElementById('filterSelect');
+        const searchInput = document.getElementById('searchInput');
+        const board = document.getElementById('board');
+        const loadingText = document.getElementById('loadingText');
+        const summaryContainer = document.getElementById('summaryContainer');
+        const scrollContainer = document.getElementById('scrollContainer');
 
-let questInfo = {}; // key = quest name
-let questIndex = [];
 
-const grouped = {
-    General: [],
-    Berserker: [],
-    Brute: [],
-    Knight: [],
-    Rogue: [],
-    Unknown: []
-};
+        // Initialization
+        async function init() {
+            setupEventListeners();
+            await fetchCSVData();
+            
+            // Background polling every 60 seconds
+            setInterval(() => fetchCSVData(true), 60000);
+        }
 
-let columnCategories = [];
+        // Fetch & Parse Data
+        async function fetchCSVData(isSilentRefresh = false) {
+            if(!isSilentRefresh) loadingText.style.display = 'block';
 
-async function loadAllData() {
-    await Promise.all([loadSheet(), loadQuestInfo()]);
-}
+            try {
+                Papa.parse(CSV_URL, {
+                    download: true,
+                    header: false,
+                    skipEmptyLines: false,
+                    complete: function(results) {
+                        processData(results.data);
+                        if(!isSilentRefresh) loadingText.style.display = 'none';
+                        renderBoard();
+                    },
+                    error: function(err) {
+                        console.error(err);
+                        loadingText.innerText = 'Error loading CSV. Check the URL and console.';
+                    }
+                });
+            } catch (error) {
+                console.error("Fetch Error:", error);
+            }
+        }
 
-async function loadSheet() {
-    const response = await fetch(SHEET_URL);
-    const csvText = await response.text();
+        function processData(data) {
+            if(data.length < 7) return;
 
-    const rows = parseCSV(csvText);
+            const catRow = data[0];   // Row 1
+            const nameRow = data[2];  // Row 3
+            const descRow = data[3];  // Row 4
+            const codeRow = data[4];  // Row 5
+            const mediaRow = data[5]; // Row 6
 
-    buildColumnCategories(rows);
+            parsedQuests = [];
+            let currentCat = "General";
 
-    // Row 3 contains headers
-    headers = rows[2];
+            // K to DI (Indices 10 to 112) + DJ to DV (Indices 113 to 125)
+            for(let i = 10; i <= 125; i++) {
+                if (i >= catRow.length || i >= nameRow.length) continue;
+                if (!nameRow[i] || nameRow[i].trim() === '') continue;
 
-    // Data starts at Row 4
-    allRows = rows.slice(3);
+                if (i >= 113) {
+                    currentCat = "After-Jarl Achievements";
+                } else if (catRow[i] && catRow[i].trim() !== '') {
+                    currentCat = catRow[i].trim();
+                }
 
-    populatePlayerDropdown();
-}
+                parsedQuests.push({
+                    index: i,
+                    category: currentCat,
+                    name: nameRow[i].trim(),
+                    desc: descRow[i] ? descRow[i].trim() : '',
+                    code: codeRow[i] ? codeRow[i].trim() : '',
+                    media: mediaRow[i] ? mediaRow[i].trim() : '',
+                    isLegendary: nameRow[i].toLowerCase().includes('legendary')
+                });
+            }
 
-async function loadQuestInfo() {
-    const res = await fetch(QUEST_INFO_URL);
-    const text = await res.text();
+            players = [];
+            for (let r = 6; r < data.length; r++) {
+                const row = data[r];
+                if (!row[0] && !row[1]) continue;
 
-    const rows = parseCSV(text);
+                players.push({
+                    discordId: row[0],
+                    name: row[1],
+                    counts: {
+                        "Contracts": row[2] || 0,
+                        "Bounties": row[3] || 0,
+                        "Summons": row[4] || 0,
+                        "Berserker": row[5] || 0,
+                        "Brute": row[6] || 0,
+                        "Knight": row[7] || 0,
+                        "Rogue": row[8] || 0,
+                        "Legendary": row[9] || 0
+                    },
+                    rowData: row
+                });
+            }
 
-    questIndex = [];
+            populatePlayerDropdown();
+            determineSelectedPlayer();
+        }
 
-    const startRow = 3; // row 4
-    const rowCount = rows.length;
-    const colCount = rows[0].length;
+        function populatePlayerDropdown() {
+            const currentVal = playerSelect.value;
+            playerSelect.innerHTML = '<option value="">Select a Player...</option>';
+            players.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.name;
+                opt.innerText = p.name;
+                playerSelect.appendChild(opt);
+            });
+            playerSelect.value = currentVal;
+        }
 
-    for (let col = 0; col < colCount; col++) {
-        const category = (rows[0][col] || "").trim() || "Unknown";
+        function determineSelectedPlayer() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlPlayer = urlParams.get('player');
 
-        for (let row = startRow; row < rowCount; row++) {
-            const rawName = (rows[row][col] || "").trim();
-            if (!rawName) continue;
+            if (urlPlayer) {
+                const match = players.find(p => p.name.toLowerCase() === urlPlayer.toLowerCase());
+                if (match) {
+                    selectedPlayerName = match.name;
+                    localStorage.setItem('trackerPlayer', selectedPlayerName);
+                }
+            } else {
+                selectedPlayerName = localStorage.getItem('trackerPlayer') || '';
+            }
 
-            const desc = (rows[row + 1]?.[col] || "").trim() || "No description available";
-            const submitCode = (rows[row + 2]?.[col] || "").trim() || "";
+            playerSelect.value = selectedPlayerName;
+        }
 
-            questIndex.push({
-                rawName,
-                category,
-                desc,
-                submitCode
+        function evaluatePlayerProgress(player) {
+            const progress = {};
+            
+            parsedQuests.forEach(q => {
+                const val = player.rowData[q.index] ? player.rowData[q.index].trim().toUpperCase() : 'FALSE';
+                progress[q.index] = { completed: val === 'TRUE', replaced: false };
             });
 
-            // skip ahead so we don't re-read same quest
-            row += 2;
-        }
-    }
-}
+            parsedQuests.forEach((q, idx) => {
+                if (q.isLegendary && progress[q.index].completed) {
+                    if (idx > 0) {
+                        const leftQuestIndex = parsedQuests[idx - 1].index;
+                        progress[leftQuestIndex].replaced = true;
+                        progress[leftQuestIndex].completed = false;
+                    }
+                }
+            });
 
-function findQuestMeta(trackerName) {
-    const t = trackerName.toLowerCase();
-
-    let best = null;
-    let bestScore = 0;
-
-    for (const q of questIndex) {
-        const qn = q.rawName.toLowerCase();
-
-        let score = 0;
-
-        if (qn.includes(t)) score += 10;
-        if (t.includes(qn)) score += 5;
-
-        // partial word overlap bonus
-        const tWords = t.split(" ");
-        for (const w of tWords) {
-            if (qn.includes(w)) score += 1;
+            return progress;
         }
 
-        if (score > bestScore) {
-            bestScore = score;
-            best = q;
-        }
-    }
-
-    return best || {
-        category: "Unknown",
-        desc: "No description available",
-        rawName: trackerName
-    };
-}
-
-function parseCSV(text) {
-    const rows = [];
-    let currentRow = [];
-    let currentCell = '';
-    let insideQuotes = false;
-
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        const nextChar = text[i + 1];
-
-        if (char === '"') {
-            if (insideQuotes && nextChar === '"') {
-                currentCell += '"';
-                i++;
+        function generateMediaHTML(url) {
+            if (!url) return '';
+            
+            if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                let videoId = '';
+                if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+                else if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+                return `<div class="media-container"><iframe src="https://www.youtube.com/embed/${videoId}" allow="encrypted-media; fullscreen" allowfullscreen></iframe></div>`;
+            } else if (url.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
+                return `<div class="media-container"><img src="${url}" alt="Quest Media"></div>`;
+            } else if (url.match(/\.(mp4|webm)$/i)) {
+                return `<div class="media-container"><video controls><source src="${url}"></video></div>`;
             } else {
-                insideQuotes = !insideQuotes;
+                return `<div class="media-container"><a href="${url}" target="_blank">View External Link</a></div>`;
             }
-        } else if (char === ',' && !insideQuotes) {
-            currentRow.push(currentCell);
-            currentCell = '';
-        } else if ((char === '\n' || char === '\r') && !insideQuotes) {
-            if (currentCell !== '' || currentRow.length > 0) {
-                currentRow.push(currentCell);
-                rows.push(currentRow);
-                currentRow = [];
-                currentCell = '';
+        }
+
+        function renderBoard() {
+            const player = players.find(p => p.name === selectedPlayerName);
+            board.innerHTML = '';
+            summaryContainer.innerHTML = '';
+
+            if (!player) {
+                board.innerHTML = '<div class="loading">Please select a player to view progression.</div>';
+                return;
             }
-        } else {
-            currentCell += char;
-        }
-    }
 
-    if (currentCell.length > 0 || currentRow.length > 0) {
-        currentRow.push(currentCell);
-        rows.push(currentRow);
-    }
+            // Render Large Scrollable Summary Counts
+            for (const [key, value] of Object.entries(player.counts)) {
+                summaryContainer.innerHTML += `<div class="summary-pill">${key}: <strong>${value}</strong></div>`;
+            }
 
-    return rows;
-}
+            const progress = evaluatePlayerProgress(player);
+            const filterState = filterSelect.value;
+            const searchVal = searchInput.value.toLowerCase();
 
-function buildColumnCategories(rows) {
-    const row = rows[0]; // Row 1 = categories
+            const categories = ["General", "Berserker", "Brute", "Knight", "Rogue", "After-Jarl Achievements"];
+            
+            // Save scroll coordinates from unified container
+            const scrollX = scrollContainer.scrollLeft;
+            const scrollY = scrollContainer.scrollTop;
 
-    let currentCategory = "Unknown";
+            categories.forEach(cat => {
+                const catQuests = parsedQuests.filter(q => q.category === cat);
+                if (catQuests.length === 0) return;
 
-    columnCategories = [];
+                const colDiv = document.createElement('div');
+                colDiv.className = 'category-column';
+                colDiv.innerHTML = `<h2>${cat}</h2>`;
 
-    for (let col = 0; col < row.length; col++) {
-        const cell = (row[col] || "").trim();
+                let questsAdded = 0;
 
-        if (cell) {
-            currentCategory = cell;
-        }
+                catQuests.forEach(q => {
+                    const status = progress[q.index];
+                    const isTodo = todoSet.has(q.index);
 
-        columnCategories[col] = currentCategory;
-    }
+                    if (status.completed && isTodo) {
+                        todoSet.delete(q.index);
+                        saveTodos();
+                    }
 
-    // console.log(columnCategories.indexOf("General"))
-    // console.log(columnCategories.indexOf("Champion Jarl"))
+                    if (filterState === 'completed' && !status.completed) return;
+                    if (filterState === 'incomplete' && status.completed) return;
+                    if (filterState === 'todo' && !todoSet.has(q.index)) return;
+                    if (searchVal && !q.name.toLowerCase().includes(searchVal) && !q.desc.toLowerCase().includes(searchVal)) return;
 
-    // // Fix: anything after Rogue becomes Achievements
-    // let seenRogue = false;
+                    const card = document.createElement('div');
+                    card.className = `quest-card ${status.completed ? 'completed' : ''} ${status.replaced ? 'replaced' : ''} ${expandedSet.has(q.index) ? 'expanded' : ''}`;
+                    card.onclick = () => toggleExpand(q.index, card);
 
-    // for (let col = 0; col < columnCategories.length; col++) {
-    //     if (columnCategories[col] === "Rogue") {
-    //         seenRogue = true;
-    //         continue;
-    //     }
+                    // Checkbox Logic
+                    let checkboxHtml = '';
+                    if (status.completed) {
+                        // Completed = Green Checkbox, locked
+                        checkboxHtml = `<input type="checkbox" class="title-checkbox is-completed" checked disabled onclick="event.stopPropagation();">`;
+                    } else if (status.replaced) {
+                        // Replaced = Disabled unchecked
+                        checkboxHtml = `<input type="checkbox" class="title-checkbox is-completed" checked disabled onclick="event.stopPropagation();">`;
+                    } else {
+                        // Incomplete = Red To-Do Checkbox, interactable
+                        checkboxHtml = `<input type="checkbox" class="title-checkbox" ${isTodo ? 'checked' : ''} onclick="event.stopPropagation(); toggleTodo(${q.index}, this.checked);">`;
+                    }
 
-    //     if (seenRogue && col > columnCategories.indexOf("Rogue")) {
-    //         columnCategories[col] = "Achievements";
-    //     }
-    // }
-}
+                    // // Title Logic
+                    // let replacedTag = status.replaced ? '<span class="status-replaced">Legendary Completed</span>' : '';
 
-function getPlayerFromURL() {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('player');
-}
+                    // Details Logic
+                    let detailsHtml = `
+                        <div class="quest-details" onclick="event.stopPropagation()">
+                            <div class="quest-desc">${q.desc || 'No description provided.'}</div>
+                    `;
 
-function populatePlayerDropdown() {
-    const select = document.getElementById('playerSelect');
-
-    select.innerHTML = '<option value="">Select a player</option>';
-
-    const playerNames = allRows
-        .map(row => row[1])
-        .filter(name => name && name.trim() !== '');
-
-    playerNames.sort((a, b) => a.localeCompare(b));
-
-    playerNames.forEach(name => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        select.appendChild(option);
-    });
-
-    const urlPlayer = getPlayerFromURL();
-    const savedPlayer = localStorage.getItem('selectedPlayer');
-
-    const initialPlayer =
-        urlPlayer && playerNames.includes(urlPlayer)
-            ? urlPlayer
-            : savedPlayer && playerNames.includes(savedPlayer)
-                ? savedPlayer
-                : null;
-
-    if (initialPlayer) {
-        select.value = initialPlayer;
-        displayPlayer(initialPlayer);
-    }
-
-    select.onchange = () => {
-        const name = select.value;
-
-        localStorage.setItem('selectedPlayer', name);
-
-        // update URL without reloading page
-        const newURL = new URL(window.location);
-        if (name) {
-            newURL.searchParams.set('player', name);
-        } else {
-            newURL.searchParams.delete('player');
-        }
-        window.history.replaceState({}, '', newURL);
-
-        displayPlayer(name);
-    };
-}
-
-let currentQuest = null;
-
-function openQuestPanel(encodedName) {
-    const name = decodeURIComponent(encodedName);
-    const meta = findQuestMeta(name);
-
-    currentQuest = meta;
-
-    document.getElementById("panelTitle").textContent = meta.rawName;
-    document.getElementById("panelCategory").textContent = meta.category;
-    document.getElementById("panelDesc").textContent = meta.desc;
-
-    const panel = document.getElementById("questPanel");
-    const backdrop = document.getElementById("panelBackdrop");
-
-    panel.classList.add("show");
-    panel.classList.remove("hidden");
-
-    backdrop.classList.remove("hidden");
-
-    document.getElementById("copyBtn").onclick = () => {
-        if (!meta.submitCode) return;
-
-        navigator.clipboard.writeText(meta.submitCode);
-        showToast("Quest code copied!");
-    };
-}
-
-function closeQuestPanel() {
-    document.getElementById("questPanel").classList.remove("show");
-
-    setTimeout(() => {
-        document.getElementById("questPanel").classList.add("hidden");
-        document.getElementById("panelBackdrop").classList.add("hidden");
-    }, 250);
-}
-
-function copyQuestCode(encodedName) {
-    const name = decodeURIComponent(encodedName);
-
-    const meta = findQuestMeta(name);
-
-    if (!meta.submitCode) {
-        alert("No submit code found for this quest.");
-        return;
-    }
-
-    navigator.clipboard.writeText(meta.submitCode)
-        .then(() => {
-            showToast("Quest code copied!");
-        })
-        .catch(err => {
-            console.error("Clipboard failed:", err);
-        });
-}
-
-function showToast(msg) {
-    const div = document.createElement("div");
-    div.textContent = msg;
-    div.style.position = "fixed";
-    div.style.bottom = "20px";
-    div.style.right = "20px";
-    div.style.background = "#333";
-    div.style.color = "white";
-    div.style.padding = "10px 15px";
-    div.style.borderRadius = "8px";
-    div.style.zIndex = 9999;
-
-    document.body.appendChild(div);
-
-    setTimeout(() => div.remove(), 1500);
-}
-
-function displayPlayer(playerName) {
-    const content = document.getElementById('content');
-
-    if (!playerName) {
-        content.innerHTML = '';
-        return;
-    }
-
-    const row = allRows.find(r => r[1] === playerName);
-
-    if (!row) {
-        content.innerHTML = '<p>Player not found.</p>';
-        return;
-    }
-
-    // Columns C-J (indexes 2-9)
-    const statHTML = [];
-
-    for (let col = 2; col <= 9; col++) {
-        const label = headers[col] || `Column ${col}`;
-        const value = row[col] || '0';
-
-        statHTML.push(`
-            <div class="stat-card">
-                <div class="stat-title">${escapeHTML(label)}</div>
-                <div class="stat-value">${escapeHTML(value)}</div>
-            </div>
-        `);
-    }
-
-    const grouped = {};
-
-    for (let col = 10; col < headers.length; col++) {
-
-        const category = columnCategories[col] || "Unknown";
-        const questName = headers[col];
-
-        if (!questName || category === "Unknown") continue;
-
-        const raw = (row[col] || "").toLowerCase();
-
-        const completed =
-            raw === "true" ||
-            raw === "yes" ||
-            raw === "1";
-
-        if (!grouped[category]) {
-            grouped[category] = [];
-        }
-
-        const meta = findQuestMeta(questName);
-
-        grouped[category].push({
-            name: questName,
-            completed,
-            desc: meta.desc
-        });
-    }
-
-    let questHTML = "";
-
-    for (const [category, quests] of Object.entries(grouped)) {
-
-        questHTML += `
-            <div class="quest-category">
-                <h3>${escapeHTML(category)}</h3>
-
-                <div class="quest-grid">
-                    ${quests.map(q => `
-                        <div class="quest-item ${q.completed ? 'quest-complete' : 'quest-incomplete'}"
-                             onclick="openQuestPanel('${encodeURIComponent(q.name)}')">
-                            <div class="status-icon">
-                                ${q.completed ? "✅" : "⬜"}
+                    if (q.code) {
+                        detailsHtml += `
+                            <div class="code-embed">
+                                <code>${q.code}</code>
+                                <button class="copy-btn" onclick="copyText(this, \`${q.code.replace(/`/g, '\\`')}\`)">Copy</button>
                             </div>
-                            <div>${escapeHTML(q.name)}</div>
+                        `;
+                    }
+
+                    if (q.media) {
+                        detailsHtml += generateMediaHTML(q.media);
+                    }
+
+                    detailsHtml += `</div>`;
+
+                    // Construct Card
+                    card.innerHTML = `
+                        <div class="quest-header">
+                            ${checkboxHtml}
+                            <h3 class="quest-title">${q.name}</h3>
                         </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
+                        ${detailsHtml}
+                    `;
 
-    content.innerHTML = `
-        <h2>${escapeHTML(playerName)}</h2>
+                    colDiv.appendChild(card);
+                    questsAdded++;
+                });
 
-        <div class="stats-grid">
-            ${statHTML.join('')}
-        </div>
+                if (questsAdded > 0) {
+                    board.appendChild(colDiv);
+                }
+            });
 
-        <div class="quest-section">
-            <h2>Quest Progress</h2>
-            ${questHTML}
-        </div>
-    `;
-}
-
-function escapeHTML(str) {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-setInterval(async () => {
-    try {
-        await loadAllData();
-
-        const currentPlayer =
-            document.getElementById('playerSelect').value;
-
-        if (currentPlayer) {
-            displayPlayer(currentPlayer);
+            // Restore scroll positions inside unified container
+            scrollContainer.scrollLeft = scrollX;
+            scrollContainer.scrollTop = scrollY;
         }
 
-        console.log('Sheet refreshed');
-    } catch (err) {
-        console.error('Refresh failed', err);
-    }
-}, 10000);
+        // Interactivity
+        function setupEventListeners() {
+            playerSelect.addEventListener('change', (e) => {
+                selectedPlayerName = e.target.value;
+                localStorage.setItem('trackerPlayer', selectedPlayerName);
+                
+                const url = new URL(window.location);
+                url.searchParams.delete('player');
+                window.history.replaceState({}, '', url);
+                
+                renderBoard();
+            });
 
-loadAllData().catch(err => {
-    console.error(err);
+            filterSelect.addEventListener('change', renderBoard);
+            searchInput.addEventListener('input', renderBoard);
+            
+            document.getElementById('expandBtn').addEventListener('click', () => {
+                parsedQuests.forEach(q => expandedSet.add(q.index));
+                renderBoard();
+            });
+            
+            document.getElementById('collapseBtn').addEventListener('click', () => {
+                expandedSet.clear();
+                renderBoard();
+            });
+        }
 
-    document.getElementById('content').innerHTML = `
-        <div class="loading">
-            Failed to load Google Sheet.<br><br>
-            Make sure the sheet is published to the web as CSV.
-        </div>
-    `;
-});
-</script>
-<div id="questPanel" class="quest-panel hidden">
-    <div class="quest-panel-content">
-        <div class="quest-panel-header">
-            <h2 id="panelTitle">Quest</h2>
-            <button onclick="closeQuestPanel()">✖</button>
-        </div>
+        function toggleExpand(index, cardEl) {
+            // Prevent toggling if user is highlighting details text
+            if(window.getSelection().toString().length > 0) return;
+            
+            if (expandedSet.has(index)) {
+                expandedSet.delete(index);
+                cardEl.classList.remove('expanded');
+            } else {
+                expandedSet.add(index);
+                cardEl.classList.add('expanded');
+            }
+        }
 
-        <div id="panelCategory" class="quest-category-label"></div>
+        function toggleTodo(index, isChecked) {
+            if (isChecked) todoSet.add(index);
+            else todoSet.delete(index);
+            saveTodos();
+        }
 
-        <p id="panelDesc" class="quest-description"></p>
+        function saveTodos() {
+            localStorage.setItem('trackerTodo', JSON.stringify(Array.from(todoSet)));
+        }
 
-        <button id="copyBtn" class="copy-btn">Copy Submit Code</button>
-    </div>
-</div>
+        function copyText(btn, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = btn.innerText;
+                btn.innerText = 'Copied!';
+                btn.style.backgroundColor = 'var(--completed-color)';
+                btn.style.borderColor = 'var(--completed-color)';
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.backgroundColor = '';
+                    btn.style.borderColor = '';
+                }, 2000);
+            });
+        }
 
-<div id="panelBackdrop" class="panel-backdrop hidden" onclick="closeQuestPanel()"></div>
+        // Run
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
 </body>
 </html>
