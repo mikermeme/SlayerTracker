@@ -360,8 +360,14 @@
         // ==========================================
         // CONFIGURATION: REPLACE THIS URL WITH YOURS
         // ==========================================
-        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKF0b3pHt2lo1HGy-93ulZ7y_GbnUbFKNSNC6bzLsa6XO73vkqrjtNrjjA4S6UieODRu-h_ZUXDfS-/pub?gid=1645289372&single=true&output=csv';
-        
+        // const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKF0b3pHt2lo1HGy-93ulZ7y_GbnUbFKNSNC6bzLsa6XO73vkqrjtNrjjA4S6UieODRu-h_ZUXDfS-/pub?gid=1645289372&single=true&output=csv';
+
+        const SHEET_ID = '1Xij6i1JIUT8iAdVgMDuwy9JzZGvMaU0xv85pSJZmElM';
+        const GID = '1645289372'
+        const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}&_=${Date.now()}`;
+
+        // console.log(CSV_URL)
+
         // State
         let parsedQuests = [];
         let players = [];
